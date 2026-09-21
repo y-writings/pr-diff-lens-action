@@ -3,3 +3,4 @@
 .gh
 .opencode/plugins/entire.ts
 # end driftline
+node_modules/

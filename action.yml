@@ -1,0 +1,15 @@
+name: PR Diff Lens
+description: Publish grouped pull request change statistics as a comment.
+author: y-writings
+inputs:
+  github-token:
+    description: Token used to read the pull request and create or update its comment.
+    required: false
+    default: ${{ github.token }}
+  config-path:
+    description: Repository-relative path to the PR diff group configuration in the PR head.
+    required: false
+    default: .github/pr-diff-groups.json
+runs:
+  using: node24
+  main: dist/index.js
