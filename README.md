@@ -8,8 +8,8 @@ or execute pull request code.
 ## Caller workflow
 
 Create `.github/workflows/pr-diff-statistics.yml` in the repository that owns
-the pull requests. Replace `<FULL_COMMIT_SHA>` with a full commit SHA from this
-action; do not use a mutable tag.
+the pull requests. Pin this action to a full commit SHA; do not use a mutable
+tag.
 
 ```yaml
 name: PR diff statistics
@@ -32,7 +32,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: y-writings/pr-diff-lens-action@<FULL_COMMIT_SHA>
+      - uses: y-writings/pr-diff-lens-action@25c3dfdc157688d98bd0effdc58dc54930e77084
         with:
           github-token: ${{ github.token }}
           config-path: .github/pr-diff-groups.json
