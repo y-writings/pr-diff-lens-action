@@ -37311,13 +37311,11 @@ function bodySection(renderedComment) {
     return `${PR_BODY_START_MARKER}\n${content}\n${PR_BODY_END_MARKER}`;
 }
 function markerIndexes(body, marker) {
-    const indexes = [];
-    let offset = 0;
-    while ((offset = body.indexOf(marker, offset)) !== -1) {
-        indexes.push(offset);
-        offset += marker.length;
-    }
-    return indexes;
+    const pattern = new RegExp(`^${escapeRegularExpression(marker)}(?=\\r?$)`, "gm");
+    return Array.from(body.matchAll(pattern), (match) => match.index);
+}
+function escapeRegularExpression(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function escapeTableCell(value) {
     return value

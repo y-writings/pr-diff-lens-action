@@ -33,7 +33,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: y-writings/pr-diff-lens-action@25c3dfdc157688d98bd0effdc58dc54930e77084
+      - uses: y-writings/pr-diff-lens-action@628616d9de84e372522b24bee915832cf79d68a2
         with:
           github-token: ${{ github.token }}
           config-path: .github/pr-diff-groups.json
@@ -118,7 +118,9 @@ in the body or PR template:
 
 ```markdown
 <!-- pr-diff-statistics:start -->
+
 The action replaces only this content.
+
 <!-- pr-diff-statistics:end -->
 ```
 

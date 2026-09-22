@@ -59,13 +59,12 @@ function bodySection(renderedComment: string): string {
 }
 
 function markerIndexes(body: string, marker: string): number[] {
-  const indexes: number[] = [];
-  let offset = 0;
-  while ((offset = body.indexOf(marker, offset)) !== -1) {
-    indexes.push(offset);
-    offset += marker.length;
-  }
-  return indexes;
+  const pattern = new RegExp(`^${escapeRegularExpression(marker)}(?=\\r?$)`, "gm");
+  return Array.from(body.matchAll(pattern), (match) => match.index!);
+}
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function escapeTableCell(value: string): string {
