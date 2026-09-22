@@ -37262,6 +37262,8 @@ function getOctokit(token, options, ...additionalPlugins) {
 //# sourceMappingURL=github.js.map
 ;// CONCATENATED MODULE: ./src/comment.ts
 const COMMENT_MARKER = "<!-- pr-diff-statistics -->";
+const PR_BODY_START_MARKER = "<!-- pr-diff-statistics:start -->";
+const PR_BODY_END_MARKER = "<!-- pr-diff-statistics:end -->";
 function renderStatisticsComment(report, headSha) {
     const rows = [...report.groups, report.fallback].map((statistics) => `| ${escapeTableCell(statistics.label)} | ${escapeTableCell(statistics.suffixes)} | ${statistics.files} | ${statistics.additions} | ${statistics.deletions} | ${statistics.changes} |`);
     return [
@@ -37284,6 +37286,36 @@ function renderUnavailableComment(headSha) {
         "GitHub APIの取得上限により集計不可",
         `対象 head commit: ${headSha.slice(0, 7)}`,
     ].join("\n");
+}
+function updatePullRequestBody(body, renderedComment) {
+    const startIndexes = markerIndexes(body, PR_BODY_START_MARKER);
+    const endIndexes = markerIndexes(body, PR_BODY_END_MARKER);
+    if (startIndexes.length === 0 && endIndexes.length === 0) {
+        const separator = body.length === 0 ? "" : body.endsWith("\n") ? "\n" : "\n\n";
+        return `${body}${separator}${bodySection(renderedComment)}`;
+    }
+    if (startIndexes.length !== 1 || endIndexes.length !== 1) {
+        throw new Error("PR body must contain either no statistics markers or exactly one start/end marker pair");
+    }
+    const start = startIndexes[0];
+    const end = endIndexes[0];
+    if (start > end) {
+        throw new Error("PR body statistics start marker must appear before the end marker");
+    }
+    return `${body.slice(0, start)}${bodySection(renderedComment)}${body.slice(end + PR_BODY_END_MARKER.length)}`;
+}
+function bodySection(renderedComment) {
+    const content = renderedComment.startsWith(`${COMMENT_MARKER}\n`)
+        ? renderedComment.slice(COMMENT_MARKER.length + 1)
+        : renderedComment;
+    return `${PR_BODY_START_MARKER}\n${content}\n${PR_BODY_END_MARKER}`;
+}
+function markerIndexes(body, marker) {
+    const pattern = new RegExp(`^${escapeRegularExpression(marker)}(?=\\r?$)`, "gm");
+    return Array.from(body.matchAll(pattern), (match) => match.index);
+}
+function escapeRegularExpression(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function escapeTableCell(value) {
     return value
@@ -37310,6 +37342,9 @@ function validateConfig(value) {
     }
     if (value.version !== 1) {
         throw new Error("config.version must be 1");
+    }
+    if (value.output !== undefined && value.output !== "comment" && value.output !== "pr-body") {
+        throw new Error('config.output must be "comment" or "pr-body"');
     }
     if (!Array.isArray(value.groups) || value.groups.length === 0) {
         throw new Error("config.groups must be a non-empty array");
@@ -37345,7 +37380,7 @@ function validateConfig(value) {
             excludeSuffixes: group.excludeSuffixes,
         };
     });
-    return { version: 1, groups, fallbackLabel: value.fallbackLabel };
+    return { version: 1, output: value.output ?? "comment", groups, fallbackLabel: value.fallbackLabel };
 }
 function summarize(files, config) {
     const groups = config.groups.map((group) => createStatistics(group.label, formatSuffixes(group)));
@@ -37454,6 +37489,13 @@ function createGitHubAdapter(token) {
         updateIssueComment: async (owner, repo, commentId, body) => {
             await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentId, body });
         },
+        getPullRequestBody: async (owner, repo, pullNumber) => {
+            const { data } = await octokit.rest.pulls.get({ owner, repo, pull_number: pullNumber });
+            return data.body ?? "";
+        },
+        updatePullRequestBody: async (owner, repo, pullNumber, body) => {
+            await octokit.rest.pulls.update({ owner, repo, pull_number: pullNumber, body });
+        },
     };
 }
 function toPullRequestFile(file) {
@@ -37483,14 +37525,22 @@ async function run(dependencies) {
         const files = await github.listPullRequestFiles(owner, repo, pullRequest.number);
         if (files.length !== pullRequest.changedFiles) {
             dependencies.core.warning(`GitHub returned ${files.length} of ${pullRequest.changedFiles} changed files; publishing no partial statistics.`);
-            await upsertComment(github, owner, repo, pullRequest.number, renderUnavailableComment(pullRequest.headSha));
+            await publish(github, config.output, owner, repo, pullRequest.number, renderUnavailableComment(pullRequest.headSha));
             return;
         }
-        await upsertComment(github, owner, repo, pullRequest.number, renderStatisticsComment(summarize(files, config), pullRequest.headSha));
+        await publish(github, config.output, owner, repo, pullRequest.number, renderStatisticsComment(summarize(files, config), pullRequest.headSha));
     }
     catch (error) {
         dependencies.core.setFailed(error instanceof Error ? error.message : String(error));
     }
+}
+async function publish(github, output, owner, repo, pullNumber, content) {
+    if (output === "comment") {
+        await upsertComment(github, owner, repo, pullNumber, content);
+        return;
+    }
+    const currentBody = await github.getPullRequestBody(owner, repo, pullNumber);
+    await github.updatePullRequestBody(owner, repo, pullNumber, updatePullRequestBody(currentBody, content));
 }
 async function runAction() {
     await run({

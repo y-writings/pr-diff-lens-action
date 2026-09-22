@@ -16,6 +16,8 @@ export interface GitHubAdapter {
   listIssueComments(owner: string, repo: string, pullNumber: number): Promise<IssueComment[]>;
   createIssueComment(owner: string, repo: string, pullNumber: number, body: string): Promise<void>;
   updateIssueComment(owner: string, repo: string, commentId: number, body: string): Promise<void>;
+  getPullRequestBody(owner: string, repo: string, pullNumber: number): Promise<string>;
+  updatePullRequestBody(owner: string, repo: string, pullNumber: number, body: string): Promise<void>;
 }
 
 export function createGitHubAdapter(token: string): GitHubAdapter {
@@ -79,6 +81,13 @@ export function createGitHubAdapter(token: string): GitHubAdapter {
     },
     updateIssueComment: async (owner, repo, commentId, body) => {
       await octokit.rest.issues.updateComment({ owner, repo, comment_id: commentId, body });
+    },
+    getPullRequestBody: async (owner, repo, pullNumber) => {
+      const { data } = await octokit.rest.pulls.get({ owner, repo, pull_number: pullNumber });
+      return data.body ?? "";
+    },
+    updatePullRequestBody: async (owner, repo, pullNumber, body) => {
+      await octokit.rest.pulls.update({ owner, repo, pull_number: pullNumber, body });
     },
   };
 }

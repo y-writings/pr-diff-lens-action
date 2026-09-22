@@ -101,4 +101,22 @@ describe("createGitHubAdapter", () => {
       page: 2,
     });
   });
+
+  it("gets the current PR body and updates only its body field", async () => {
+    const get = vi.fn(async () => ({ data: { body: null } }));
+    const update = vi.fn(async () => ({ data: {} }));
+    githubMock.getOctokit.mockReturnValue({ rest: { pulls: { get, update } } });
+    const adapter = createGitHubAdapter("token-value");
+
+    await expect(adapter.getPullRequestBody("octo-org", "demo-repo", 42)).resolves.toBe("");
+    await adapter.updatePullRequestBody("octo-org", "demo-repo", 42, "new body");
+
+    expect(get).toHaveBeenCalledWith({ owner: "octo-org", repo: "demo-repo", pull_number: 42 });
+    expect(update).toHaveBeenCalledWith({
+      owner: "octo-org",
+      repo: "demo-repo",
+      pull_number: 42,
+      body: "new body",
+    });
+  });
 });

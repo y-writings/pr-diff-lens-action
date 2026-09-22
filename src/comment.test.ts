@@ -1,10 +1,59 @@
 import { describe, expect, it } from "vitest";
 
-import { escapeTableCell, renderStatisticsComment } from "./comment.js";
+import {
+  escapeTableCell,
+  PR_BODY_END_MARKER,
+  PR_BODY_START_MARKER,
+  renderStatisticsComment,
+  updatePullRequestBody,
+} from "./comment.js";
 
 describe("escapeTableCell", () => {
   it("escapes table and code formatting characters", () => {
     expect(escapeTableCell("line one\r\nline|two`\\")).toBe("line one line\\|two\\`\\\\");
+  });
+});
+
+describe("updatePullRequestBody", () => {
+  const rendered = "<!-- pr-diff-statistics -->\n## PR Diff Statistics\n\nnew report";
+
+  it("appends a marked section to empty and unmarked bodies without duplicating it", () => {
+    const empty = updatePullRequestBody("", rendered);
+    expect(empty).toBe(`${PR_BODY_START_MARKER}\n## PR Diff Statistics\n\nnew report\n${PR_BODY_END_MARKER}`);
+
+    const appended = updatePullRequestBody("Introduction", rendered);
+    expect(appended).toContain(`Introduction\n\n${PR_BODY_START_MARKER}`);
+    expect(updatePullRequestBody(appended, rendered).match(/pr-diff-statistics:start/g)).toHaveLength(1);
+  });
+
+  it("preserves all content outside a valid marker pair", () => {
+    expect(updatePullRequestBody(`before\n${PR_BODY_START_MARKER}\nold\n${PR_BODY_END_MARKER}\nafter`, rendered)).toBe(
+      `before\n${PR_BODY_START_MARKER}\n## PR Diff Statistics\n\nnew report\n${PR_BODY_END_MARKER}\nafter`,
+    );
+  });
+
+  it.each([
+    ["a start marker in a label", PR_BODY_START_MARKER, "include: .ts"],
+    ["an end marker in a suffix description", "Runtime", PR_BODY_END_MARKER],
+  ])("updates reports containing %s", (_name, label, suffixes) => {
+    const report = {
+      groups: [{ label, suffixes, files: 1, additions: 2, deletions: 3, changes: 5 }],
+      fallback: { label: "Other", suffixes: "other", files: 0, additions: 0, deletions: 0, changes: 0 },
+      total: { files: 1, additions: 2, deletions: 3, changes: 5 },
+    };
+    const first = updatePullRequestBody("", renderStatisticsComment(report, "abcdef012345"));
+    const second = updatePullRequestBody(first, renderStatisticsComment(report, "0123456789ab"));
+
+    expect(second).toContain("対象 head commit: 0123456");
+    expect(second).not.toContain("対象 head commit: abcdef0");
+  });
+
+  it.each([
+    [`${PR_BODY_START_MARKER}\nold`, "exactly one"],
+    [`${PR_BODY_END_MARKER}\nold\n${PR_BODY_START_MARKER}`, "must appear before"],
+    [`${PR_BODY_START_MARKER}\nold\n${PR_BODY_START_MARKER}\nold\n${PR_BODY_END_MARKER}`, "exactly one"],
+  ])("rejects malformed markers", (body, message) => {
+    expect(() => updatePullRequestBody(body, rendered)).toThrow(message);
   });
 });
 
