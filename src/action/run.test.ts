@@ -14,6 +14,7 @@ function dependencies(overrides?: {
   files?: Array<{ filename: string; additions: number; deletions: number }>;
   changedFiles?: number;
   comments?: Array<{ id: number; body: string; authorLogin: string }>;
+  body?: string;
 }) {
   const core = {
     getInput: vi.fn((name: string) =>
@@ -29,6 +30,8 @@ function dependencies(overrides?: {
     listIssueComments: vi.fn(async () => overrides?.comments ?? []),
     createIssueComment: vi.fn(async () => undefined),
     updateIssueComment: vi.fn(async () => undefined),
+    getPullRequestBody: vi.fn(async () => overrides?.body ?? "Existing introduction"),
+    updatePullRequestBody: vi.fn(async () => undefined),
   };
 
   return {
@@ -128,5 +131,53 @@ describe("run", () => {
       42,
       expect.stringContaining("| Runtime |"),
     );
+  });
+
+  it("updates only the marked PR body section in pr-body mode", async () => {
+    const test = dependencies({
+      content: JSON.stringify({ ...JSON.parse(config), output: "pr-body" }),
+      body: "Intro\n\n<!-- pr-diff-statistics:start -->\nold\n<!-- pr-diff-statistics:end -->\n\nChecklist",
+    });
+
+    await run(test.dependencies);
+
+    expect(test.github.getPullRequestBody).toHaveBeenCalledWith("octo-org", "demo-repo", 42);
+    expect(test.github.updatePullRequestBody).toHaveBeenCalledWith(
+      "octo-org",
+      "demo-repo",
+      42,
+      expect.stringMatching(/^Intro[\s\S]*PR Diff Statistics[\s\S]*Checklist$/),
+    );
+    expect(test.github.listIssueComments).not.toHaveBeenCalled();
+    expect(test.github.createIssueComment).not.toHaveBeenCalled();
+  });
+
+  it("publishes the unavailable state to the selected PR body", async () => {
+    const test = dependencies({
+      content: JSON.stringify({ ...JSON.parse(config), output: "pr-body" }),
+      changedFiles: 3001,
+    });
+
+    await run(test.dependencies);
+
+    expect(test.github.updatePullRequestBody).toHaveBeenCalledWith(
+      "octo-org",
+      "demo-repo",
+      42,
+      expect.stringContaining("GitHub APIの取得上限により集計不可"),
+    );
+    expect(test.github.createIssueComment).not.toHaveBeenCalled();
+  });
+
+  it("does not write a malformed PR body", async () => {
+    const test = dependencies({
+      content: JSON.stringify({ ...JSON.parse(config), output: "pr-body" }),
+      body: "Intro\n<!-- pr-diff-statistics:start -->",
+    });
+
+    await run(test.dependencies);
+
+    expect(test.core.setFailed).toHaveBeenCalledWith(expect.stringContaining("exactly one"));
+    expect(test.github.updatePullRequestBody).not.toHaveBeenCalled();
   });
 });

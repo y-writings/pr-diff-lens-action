@@ -1,7 +1,8 @@
 # PR Diff Lens
 
 `PR Diff Lens` is a JavaScript GitHub Action that publishes grouped pull request
-change statistics in one stable PR conversation comment. It reads the changed
+change statistics in one stable PR conversation comment or a marked section of
+the PR body. It reads the changed
 file metadata and configuration through the GitHub API; it does not check out
 or execute pull request code.
 
@@ -41,6 +42,16 @@ jobs:
 The job-level condition skips external forks without failing the workflow.
 Do not replace `pull_request` with `pull_request_target`.
 
+The example above is for the default comment output. For PR body output, use
+the same workflow with these permissions (the `issues: write` permission is not
+needed):
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+```
+
 ## Configuration
 
 Create `.github/pr-diff-groups.json` in the repository. The action reads this
@@ -50,6 +61,7 @@ run.
 ```json
 {
   "version": 1,
+  "output": "comment",
   "groups": [
     {
       "id": "documentation",
@@ -72,7 +84,10 @@ run.
 }
 ```
 
-`version` must be `1`. `groups` must be non-empty; every group needs a unique,
+`version` must be `1`. The optional `output` must be `"comment"` or `"pr-body"`;
+when omitted it defaults to `"comment"`, so existing configuration remains
+compatible. Set `"output": "pr-body"` to publish into the marked PR body
+section described below. `groups` must be non-empty; every group needs a unique,
 non-empty `id` and label, plus a non-empty `includeSuffixes` array. An optional
 `excludeSuffixes` must be an array of non-empty strings. `fallbackLabel` must
 be non-empty.
@@ -89,25 +104,43 @@ expressions, directory rules, and scripts are not supported.
 - `config-path` is optional and defaults to `.github/pr-diff-groups.json`. It
   identifies the config at the PR head.
 
-The caller needs only `contents: read`, `pull-requests: read`, and
-`issues: write` permissions.
+Comment mode needs `contents: read`, `pull-requests: read`, and `issues: write`.
+PR body mode needs `contents: read` and `pull-requests: write`.
 
 ## Behavior and limits
 
-The action retrieves paginated pull request files and issue comments, then
-creates or updates the comment identified by `<!-- pr-diff-statistics -->` and
-the `github-actions[bot]` author. The comment contains a row for every group
-and fallback, with file, addition, deletion, and changed-line totals plus the
-short head SHA. It never changes the PR title or body.
+In comment mode, the action retrieves paginated pull request files and issue
+comments, then creates or updates the comment identified by
+`<!-- pr-diff-statistics -->` and the `github-actions[bot]` author.
+
+In PR body mode, you may place this section wherever the result should appear
+in the body or PR template:
+
+```markdown
+<!-- pr-diff-statistics:start -->
+The action replaces only this content.
+<!-- pr-diff-statistics:end -->
+```
+
+Exactly one correctly ordered marker pair is updated in place, preserving all
+content outside it. If neither marker exists, the action appends a marked
+section to the body (including an empty body). Re-runs update that same section.
+A missing, reversed, or duplicate marker causes the action to fail without
+updating the body. The latest body is fetched immediately before it is updated,
+and the PR title is never changed.
+
+Both destinations contain a row for every group and fallback, with file,
+addition, deletion, and changed-line totals plus the short head SHA. Switching
+destinations does not remove output previously written to the other destination.
 
 GitHub's List pull request files API returns at most 3,000 files. If its
 returned count differs from the event's `changed_files` count, the action
-replaces the stable comment with `GitHub APIの取得上限により集計不可`, records a
-warning, and succeeds. It does not use checkout, Git, extra APIs, retries,
+updates the selected destination with `GitHub APIの取得上限により集計不可`,
+records a warning, and succeeds. It does not use checkout, Git, extra APIs, retries,
 caching, or alternate fallbacks to calculate a partial result.
 
-Invalid, missing, or non-file configuration fails the action before any comment
-is created or updated. GitHub API failures also fail the action with the
+Invalid, missing, or non-file configuration fails the action before either
+destination is updated. GitHub API failures also fail the action with the
 underlying error.
 
 ## Development with Docker

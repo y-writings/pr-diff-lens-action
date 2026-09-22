@@ -19,11 +19,17 @@ const config = {
 
 describe("validateConfig", () => {
   it("accepts the v1 schema", () => {
-    expect(validateConfig(config)).toEqual(config);
+    expect(validateConfig(config)).toEqual({ ...config, output: "comment" });
+  });
+
+  it.each(["comment", "pr-body"] as const)("accepts the %s output", (output) => {
+    expect(validateConfig({ ...config, output }).output).toBe(output);
   });
 
   it.each([
     ["version mismatch", { ...config, version: 2 }, "config.version must be 1"],
+    ["invalid output", { ...config, output: "issue" }, 'config.output must be "comment" or "pr-body"'],
+    ["invalid output type", { ...config, output: 1 }, 'config.output must be "comment" or "pr-body"'],
     ["empty groups", { ...config, groups: [] }, "config.groups must be a non-empty array"],
     [
       "duplicate group IDs",

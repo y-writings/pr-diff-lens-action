@@ -1,7 +1,7 @@
 import * as core from "@actions/core";
 import { context as githubContext } from "@actions/github";
 
-import { COMMENT_MARKER, renderStatisticsComment, renderUnavailableComment } from "../comment.js";
+import { COMMENT_MARKER, renderStatisticsComment, renderUnavailableComment, updatePullRequestBody } from "../comment.js";
 import { parseConfig, summarize } from "../config.js";
 import { createGitHubAdapter, type GitHubAdapter } from "../github.js";
 
@@ -47,8 +47,9 @@ export async function run(dependencies: RunDependencies): Promise<void> {
       dependencies.core.warning(
         `GitHub returned ${files.length} of ${pullRequest.changedFiles} changed files; publishing no partial statistics.`,
       );
-      await upsertComment(
+      await publish(
         github,
+        config.output,
         owner,
         repo,
         pullRequest.number,
@@ -57,8 +58,9 @@ export async function run(dependencies: RunDependencies): Promise<void> {
       return;
     }
 
-    await upsertComment(
+    await publish(
       github,
+      config.output,
       owner,
       repo,
       pullRequest.number,
@@ -67,6 +69,27 @@ export async function run(dependencies: RunDependencies): Promise<void> {
   } catch (error) {
     dependencies.core.setFailed(error instanceof Error ? error.message : String(error));
   }
+}
+
+async function publish(
+  github: GitHubAdapter,
+  output: "comment" | "pr-body",
+  owner: string,
+  repo: string,
+  pullNumber: number,
+  content: string,
+): Promise<void> {
+  if (output === "comment") {
+    await upsertComment(github, owner, repo, pullNumber, content);
+    return;
+  }
+  const currentBody = await github.getPullRequestBody(owner, repo, pullNumber);
+  await github.updatePullRequestBody(
+    owner,
+    repo,
+    pullNumber,
+    updatePullRequestBody(currentBody, content),
+  );
 }
 
 export async function runAction(): Promise<void> {

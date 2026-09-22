@@ -7,6 +7,7 @@ export interface DiffGroup {
 
 export interface DiffConfig {
   version: 1;
+  output: "comment" | "pr-body";
   groups: DiffGroup[];
   fallbackLabel: string;
 }
@@ -50,6 +51,9 @@ export function validateConfig(value: unknown): DiffConfig {
   if (value.version !== 1) {
     throw new Error("config.version must be 1");
   }
+  if (value.output !== undefined && value.output !== "comment" && value.output !== "pr-body") {
+    throw new Error('config.output must be "comment" or "pr-body"');
+  }
   if (!Array.isArray(value.groups) || value.groups.length === 0) {
     throw new Error("config.groups must be a non-empty array");
   }
@@ -87,7 +91,7 @@ export function validateConfig(value: unknown): DiffConfig {
     };
   });
 
-  return { version: 1, groups, fallbackLabel: value.fallbackLabel };
+  return { version: 1, output: value.output ?? "comment", groups, fallbackLabel: value.fallbackLabel };
 }
 
 export function summarize(files: PullRequestFile[], config: DiffConfig): StatisticsReport {
